@@ -310,21 +310,42 @@ def get_password_policy(snapshot):
                 label = label.strip()  # Remove whitespace from label
                 value = value.strip()  # Remove whitespace from value
                 
-                # Map labels to the expected field names and handle 'Never' as None
+                # Map labels to the expected field names and convert values to int or None
                 if label == "Minimum password length":
-                    info["minimum_password_length"] = int(value) if value != "Never" else None  # Convert to int or None; deliberate choice: use None for 'Never' instead of 0 or -1 to distinguish from actual zero values
+                    try:
+                        info["minimum_password_length"] = int(value)  # Convert to int if possible
+                    except ValueError:
+                        info["minimum_password_length"] = None  # Use None for non-numeric values like 'Never' or 'None'; deliberate choice: try-except is more robust than checking specific strings, as it handles any invalid input
                 elif label == "Minimum password age (days)":
-                    info["minimum_password_age_days"] = int(value) if value != "Never" else None
+                    try:
+                        info["minimum_password_age_days"] = int(value)
+                    except ValueError:
+                        info["minimum_password_age_days"] = None
                 elif label == "Maximum password age (days)":
-                    info["maximum_password_age_days"] = int(value) if value != "Never" else None
+                    try:
+                        info["maximum_password_age_days"] = int(value)
+                    except ValueError:
+                        info["maximum_password_age_days"] = None
                 elif label == "Length of password history maintained":
-                    info["password_history_length"] = int(value) if value != "Never" else None
+                    try:
+                        info["password_history_length"] = int(value)
+                    except ValueError:
+                        info["password_history_length"] = None
                 elif label == "Lockout threshold":
-                    info["lockout_threshold"] = int(value) if value != "Never" else None
+                    try:
+                        info["lockout_threshold"] = int(value)
+                    except ValueError:
+                        info["lockout_threshold"] = None
                 elif label == "Lockout duration (minutes)":
-                    info["lockout_duration_minutes"] = int(value) if value != "Never" else None
+                    try:
+                        info["lockout_duration_minutes"] = int(value)
+                    except ValueError:
+                        info["lockout_duration_minutes"] = None
                 elif label == "Lockout observation window (minutes)":
-                    info["lockout_observation_window_minutes"] = int(value) if value != "Never" else None
+                    try:
+                        info["lockout_observation_window_minutes"] = int(value)
+                    except ValueError:
+                        info["lockout_observation_window_minutes"] = None
     except Exception as e:
         add_warning(snapshot, "password_policy failed: " + str(e))  # Add warning if parsing fails
     return info  # Return the populated dict
@@ -368,14 +389,54 @@ def get_password_policy(snapshot):
 # AI prompt: see Milestone 4 in the project spec.
 
 def get_installed_software(snapshot):
-    software = []
+    software = []  # Initialize empty list to hold software entries
     try:
-        # TODO Milestone 4: walk the Uninstall hive and append a dict
-        # for each program with a DisplayName.
-        pass
+        # Open the Uninstall registry key to enumerate subkeys
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")  # Open the registry key for installed software
+        
+        # Enumerate all subkeys using a loop that handles the end condition
+        i = 0  # Index for subkey enumeration
+        while True:  # Loop until no more subkeys
+            try:
+                subkey_name = winreg.EnumKey(key, i)  # Get the name of the i-th subkey; raises OSError when no more subkeys
+                i += 1  # Increment index for next iteration
+                
+                # Open the subkey to read its values
+                subkey = winreg.OpenKey(key, subkey_name)  # Open the specific subkey
+                
+                # Read DisplayName; skip if missing
+                display_name = get_registry_value(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\\" + subkey_name, "DisplayName")  # Use get_registry_value for consistency
+                if display_name is None:  # Skip entries without DisplayName
+                    winreg.CloseKey(subkey)  # Close subkey before skipping
+                    continue
+                
+                # Read other values
+                display_version = get_registry_value(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\\" + subkey_name, "DisplayVersion")
+                publisher = get_registry_value(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\\" + subkey_name, "Publisher")
+                
+                # Read and convert InstallDate
+                install_date_raw = get_registry_value(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\\" + subkey_name, "InstallDate")
+                if install_date_raw and len(install_date_raw) == 8:  # Check if present and correct length
+                    install_date = f"{install_date_raw[:4]}-{install_date_raw[4:6]}-{install_date_raw[6:8]}"  # Convert YYYYMMDD to YYYY-MM-DD; deliberate choice: simple string slicing is efficient and reliable for this fixed format
+                else:
+                    install_date = None  # Use None if missing or invalid
+                
+                # Append the software entry
+                software.append({  # Create dict for this software
+                    "display_name": display_name,
+                    "display_version": display_version,
+                    "publisher": publisher,
+                    "install_date": install_date
+                })
+                
+                winreg.CloseKey(subkey)  # Close the subkey after processing
+            except OSError:  # Raised when no more subkeys
+                break  # Exit the loop
+        
+        winreg.CloseKey(key)  # Close the main key
     except Exception as e:
-        add_warning(snapshot, "installed_software failed: " + str(e))
-    return software
+        add_warning(snapshot, "installed_software failed: " + str(e))  # Add warning if any error occurs
+    return software  # Return the list of software dicts
 
 
 # -------------------------------------------------------------------
