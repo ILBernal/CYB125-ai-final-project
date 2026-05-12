@@ -233,14 +233,32 @@ def get_snapshot_metadata(snapshot):
 # AI prompt: see Milestone 2 in the project spec.
 
 def get_system_identity(snapshot):
-    info = {}
+    info = {}  # Initialize an empty dict to hold the system identity data
     try:
-        # TODO Milestone 2: implement the 5 registry reads described above.
-        # Use the get_registry_value() helper — do NOT call winreg directly.
-        pass
+        # Define the registry subkey path where all these values are stored
+        subkey = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion"  # Raw string to handle backslashes literally
+        
+        # Read the OS name from the ProductName registry value
+        info["os_name"] = get_registry_value(winreg.HKEY_LOCAL_MACHINE, subkey, "ProductName")  # Direct string value, no conversion needed
+        
+        # Read the OS build number from the CurrentBuild registry value
+        info["os_build"] = get_registry_value(winreg.HKEY_LOCAL_MACHINE, subkey, "CurrentBuild")  # Direct string value, no conversion needed
+        
+        # Read the OS edition from the EditionID registry value
+        info["os_edition"] = get_registry_value(winreg.HKEY_LOCAL_MACHINE, subkey, "EditionID")  # Direct string value, no conversion needed
+        
+        # Read the registered owner from the RegisteredOwner registry value
+        info["registered_owner"] = get_registry_value(winreg.HKEY_LOCAL_MACHINE, subkey, "RegisteredOwner")  # Direct string value, no conversion needed
+        
+        # Read the install date as a Unix timestamp from the InstallDate registry value
+        install_epoch = get_registry_value(winreg.HKEY_LOCAL_MACHINE, subkey, "InstallDate")  # This is an integer timestamp, needs conversion
+        if install_epoch is not None:  # Only convert if the value exists
+            info["install_date_utc"] = datetime.datetime.utcfromtimestamp(install_epoch).isoformat() + "Z"  # Convert to ISO format with Z suffix for UTC; deliberate choice: ISO 8601 is standard for dates in JSON, but you could use other formats like strftime if preferred
+        else:
+            info["install_date_utc"] = None  # Leave as None if missing, to avoid errors
     except Exception as e:
-        add_warning(snapshot, "system_identity failed: " + str(e))
-    return info
+        add_warning(snapshot, "system_identity failed: " + str(e))  # Add a warning to the snapshot if anything fails, so the script continues
+    return info  # Return the populated dict
 
 
 # -------------------------------------------------------------------
