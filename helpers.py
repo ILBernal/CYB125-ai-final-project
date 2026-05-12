@@ -298,15 +298,36 @@ def get_system_identity(snapshot):
 # AI prompt: see Milestone 3 in the project spec.
 
 def get_password_policy(snapshot):
-    info = {}
+    info = {}  # Initialize empty dict for password policy data
     try:
-        # TODO Milestone 3: parse `net accounts` and populate the 7 fields
-        # listed in the comment block above. Use run_command() to invoke
-        # the command, then walk its output line by line.
-        pass
+        # Run the 'net accounts' command to get password policy settings
+        output = run_command(["net", "accounts"])  # Use run_command helper to execute Windows command safely
+        
+        # Parse each line of the output to extract key-value pairs
+        for line in output.splitlines():  # Split output into lines for processing
+            if ":" in line:  # Only process lines that contain a colon separator
+                label, value = line.split(":", 1)  # Split on first colon to handle values with colons
+                label = label.strip()  # Remove whitespace from label
+                value = value.strip()  # Remove whitespace from value
+                
+                # Map labels to the expected field names and handle 'Never' as None
+                if label == "Minimum password length":
+                    info["minimum_password_length"] = int(value) if value != "Never" else None  # Convert to int or None; deliberate choice: use None for 'Never' instead of 0 or -1 to distinguish from actual zero values
+                elif label == "Minimum password age (days)":
+                    info["minimum_password_age_days"] = int(value) if value != "Never" else None
+                elif label == "Maximum password age (days)":
+                    info["maximum_password_age_days"] = int(value) if value != "Never" else None
+                elif label == "Length of password history maintained":
+                    info["password_history_length"] = int(value) if value != "Never" else None
+                elif label == "Lockout threshold":
+                    info["lockout_threshold"] = int(value) if value != "Never" else None
+                elif label == "Lockout duration (minutes)":
+                    info["lockout_duration_minutes"] = int(value) if value != "Never" else None
+                elif label == "Lockout observation window (minutes)":
+                    info["lockout_observation_window_minutes"] = int(value) if value != "Never" else None
     except Exception as e:
-        add_warning(snapshot, "password_policy failed: " + str(e))
-    return info
+        add_warning(snapshot, "password_policy failed: " + str(e))  # Add warning if parsing fails
+    return info  # Return the populated dict
 
 
 # -------------------------------------------------------------------
